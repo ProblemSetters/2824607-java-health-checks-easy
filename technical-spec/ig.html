@@ -1,0 +1,289 @@
+<p>One possible approach to solve this problem:<br />
+&nbsp;</p>
+
+<p><strong>src/main/java/com/health/Commands.java:</strong><br />
+&nbsp;</p>
+
+<pre>
+<code>package com.health;
+
+import com.health.Models.CommandResult;
+import com.health.Models.Reason;
+import com.health.Models.Service;
+import com.health.Models.State;
+import com.health.Models.Status;
+
+public final class Commands {
+    private Commands() {}
+
+    private static final int ALERT_AFTER = 3;
+    private static final int RECOVER_AFTER = 2;
+
+    /// Find a service by name.
+    private static Service findService(State state, String name) {
+        for (Service s : state.services) {
+            if (s.service.equals(name)) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    /// Build a successful result carrying the command's output message.
+    private static CommandResult success(String message) {
+        return CommandResult.success(message);
+    }
+
+    /// Build a failed result carrying the reason code.
+    private static CommandResult failure(Reason reason) {
+        return CommandResult.failure(reason);
+    }
+
+    /// Record the result of a check on a service.
+    public static CommandResult check(State state, String name, String result) {
+        if (!"up".equals(result) &amp;&amp; !"down".equals(result)) {
+            return failure(Reason.INVALID_RESULT);
+        }
+
+        Service service = findService(state, name);
+        if (service == null) {
+            service = new Service();
+            service.service = name;
+            state.services.add(service);
+        }
+
+        if ("down".equals(result)) {
+            service.failsInRow++;
+            service.passesInRow = 0;
+            if (service.failsInRow &gt;= ALERT_AFTER &amp;&amp; service.status == Status.Ok) {
+                service.status = Status.Alerting;
+                if (!service.muted) {
+                    service.alerts++;
+                    return success(name + " ALERT: down " + service.failsInRow + " in a row");
+                }
+            }
+            return success(name + " down (" + service.failsInRow + " in a row)");
+        }
+
+        service.passesInRow++;
+        service.failsInRow = 0;
+        if (service.passesInRow &gt;= RECOVER_AFTER &amp;&amp; service.status == Status.Alerting) {
+            service.status = Status.Ok;
+            return success(name + " recovered");
+        }
+
+        return success(name + " up (" + service.passesInRow + " in a row)");
+    }
+
+    /// Silence a service's alerts.
+    public static CommandResult mute(State state, String name) {
+        Service service = findService(state, name);
+        if (service == null) {
+            return failure(Reason.SERVICE_NOT_FOUND);
+        }
+        if (service.muted) {
+            return failure(Reason.ALREADY_MUTED);
+        }
+
+        service.muted = true;
+
+        return success(name + " muted");
+    }
+
+    /// Turn a service's alerts back on.
+    public static CommandResult unmute(State state, String name) {
+        Service service = findService(state, name);
+        if (service == null) {
+            return failure(Reason.SERVICE_NOT_FOUND);
+        }
+        if (!service.muted) {
+            return failure(Reason.NOT_MUTED);
+        }
+
+        service.muted = false;
+
+        return success(name + " unmuted");
+    }
+}
+</code>
+</pre>
+
+<p><strong>src/main/java/com/health/Parser.java:</strong><br />
+&nbsp;</p>
+
+<pre>
+<code>package com.health;
+
+import com.health.Models.Service;
+import com.health.Models.State;
+import com.health.Models.Status;
+
+public final class Parser {
+    private Parser() {}
+
+    private static final class JsonParser {
+        private final String json;
+        private int pos = 0;
+
+        JsonParser(String json) {
+            this.json = json != null ? json : "";
+        }
+
+        State parseHealthDoc() {
+            State state = new State();
+            skipWs();
+            expect('{');
+            while (true) {
+                skipWs();
+                if (peek() == '}') {
+                    pos++;
+                    break;
+                }
+                String key = parseString();
+                skipWs();
+                expect(':');
+                skipWs();
+                if ("services".equals(key)) {
+                    parseArray(() -&gt; state.services.add(parseServiceObject()));
+                }
+                skipWs();
+                if (peek() == ',') {
+                    pos++;
+                }
+            }
+            return state;
+        }
+
+        private void parseArray(Runnable parseElement) {
+            expect('[');
+            skipWs();
+            if (peek() == ']') {
+                pos++;
+                return;
+            }
+            while (true) {
+                parseElement.run();
+                skipWs();
+                if (peek() == ',') {
+                    pos++;
+                    skipWs();
+                    continue;
+                }
+                expect(']');
+                break;
+            }
+        }
+
+        private Service parseServiceObject() {
+            Service service = new Service();
+            skipWs();
+            expect('{');
+            while (true) {
+                skipWs();
+                if (peek() == '}') {
+                    pos++;
+                    break;
+                }
+                String key = parseString();
+                skipWs();
+                expect(':');
+                skipWs();
+                if ("service".equals(key)) {
+                    service.service = parseString();
+                } else if ("status".equals(key)) {
+                    service.status = Status.parseStatus(parseString());
+                } else if ("fails_in_row".equals(key)) {
+                    service.failsInRow = parseInt();
+                } else if ("passes_in_row".equals(key)) {
+                    service.passesInRow = parseInt();
+                } else if ("muted".equals(key)) {
+                    service.muted = parseBool();
+                } else if ("alerts".equals(key)) {
+                    service.alerts = parseInt();
+                }
+                skipWs();
+                if (peek() == ',') {
+                    pos++;
+                }
+            }
+            return service;
+        }
+
+        private char peek() {
+            return pos &lt; json.length() ? json.charAt(pos) : '\0';
+        }
+
+        private void expect(char c) {
+            if (peek() != c) {
+                throw new RuntimeException("JSON parse error: expected '" + c + "' at position " + pos);
+            }
+            pos++;
+        }
+
+        private void skipWs() {
+            while (pos &lt; json.length() &amp;&amp; Character.isWhitespace(json.charAt(pos))) {
+                pos++;
+            }
+        }
+
+        private String parseString() {
+            expect('"');
+            StringBuilder value = new StringBuilder();
+            while (pos &lt; json.length() &amp;&amp; json.charAt(pos) != '"') {
+                if (json.charAt(pos) == '\\' &amp;&amp; pos + 1 &lt; json.length()) {
+                    pos++;
+                    char escaped = json.charAt(pos++);
+                    switch (escaped) {
+                        case '"' -&gt; value.append('"');
+                        case '\\' -&gt; value.append('\\');
+                        case '/' -&gt; value.append('/');
+                        case 'n' -&gt; value.append('\n');
+                        case 'r' -&gt; value.append('\r');
+                        case 't' -&gt; value.append('\t');
+                        default -&gt; value.append(escaped);
+                    }
+                } else {
+                    value.append(json.charAt(pos++));
+                }
+            }
+            expect('"');
+            return value.toString();
+        }
+
+        private int parseInt() {
+            boolean negative = false;
+            if (peek() == '-') {
+                negative = true;
+                pos++;
+            }
+            int start = pos;
+            while (pos &lt; json.length() &amp;&amp; Character.isDigit(json.charAt(pos))) {
+                pos++;
+            }
+            if (pos == start) {
+                throw new RuntimeException("JSON parse error: expected integer at position " + pos);
+            }
+            int value = Integer.parseInt(json.substring(start, pos));
+            return negative ? -value : value;
+        }
+
+        private boolean parseBool() {
+            if (json.startsWith("true", pos)) {
+                pos += 4;
+                return true;
+            }
+            if (json.startsWith("false", pos)) {
+                pos += 5;
+                return false;
+            }
+            throw new RuntimeException("JSON parse error: expected boolean at position " + pos);
+        }
+    }
+
+    /// Parse the Health Checks state JSON into the in-memory State.
+    public static State parseHealthJson(String doc) {
+        return new JsonParser(doc).parseHealthDoc();
+    }
+}
+</code>
+</pre>

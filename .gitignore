@@ -1,0 +1,6 @@
+target/
+.vscode/
+*.class
+*.jar
+report.xml
+junit.xml
