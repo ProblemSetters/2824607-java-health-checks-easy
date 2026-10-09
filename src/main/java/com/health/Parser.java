@@ -77,7 +77,7 @@ public final class Parser {
                 if ("service".equals(key)) {
                     service.service = parseString();
                 } else if ("status".equals(key)) {
-                    service.status = Status.parseStatus(parseString());
+                    service.status = "down".equals(parseString()) ? Status.Alerting : Status.Ok;
                 } else if ("fails_in_row".equals(key)) {
                     service.failsInRow = parseInt();
                 } else if ("passes_in_row".equals(key)) {
