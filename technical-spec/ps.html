@@ -1,0 +1,158 @@
+<p dir="ltr">A monitor checks each service regularly. It raises an alert after three failed checks in a row and clears the alert after two successful checks in a row, so a single failed check does not alert anyone but a real outage always does. A service can also be muted to pause its alerts. If one failed check raises an alert, a muted service still counts alerts, or a service that has recovered still shows as down, the team stops trusting the alerts.</p>
+
+<p dir="ltr"><br />
+Your task is to fix the health checks tool so that every command updates the data correctly and prints the correct success message or error reason.</p>
+
+<p dir="ltr"><br />
+<strong>State File</strong></p>
+
+<p dir="ltr"><strong>File: <span style="font-family:Courier New , Courier , monospace;">data/health.json</span></strong></p>
+
+<p dir="ltr">For example:</p>
+
+<pre>
+<code class="language-json">{
+  &quot;services&quot;: [
+    {&quot;service&quot;:&quot;api&quot;,&quot;status&quot;:&quot;ok&quot;,&quot;fails_in_row&quot;:0,&quot;passes_in_row&quot;:9,&quot;muted&quot;:false,&quot;alerts&quot;:2},
+    {&quot;service&quot;:&quot;search&quot;,&quot;status&quot;:&quot;alerting&quot;,&quot;fails_in_row&quot;:5,&quot;passes_in_row&quot;:0,&quot;muted&quot;:true,&quot;alerts&quot;:4}
+  ]
+}</code></pre>
+
+<p dir="ltr">Fields:</p>
+
+<ul>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation"><span style="font-family:Courier New , Courier , monospace;">services</span> (list): every service checked so far, in the order first seen.</p>
+
+	<ul>
+		<li aria-level="2" dir="ltr">
+		<p dir="ltr" role="presentation"><span style="font-family:Courier New , Courier , monospace;">service</span> (string): the service name.</p>
+		</li>
+		<li aria-level="2" dir="ltr">
+		<p dir="ltr" role="presentation"><span style="font-family:Courier New , Courier , monospace;">status</span> (string): <span style="font-family:Courier New , Courier , monospace;">ok</span> or <span style="font-family:Courier New , Courier , monospace;">alerting</span>.</p>
+		</li>
+		<li aria-level="2" dir="ltr">
+		<p dir="ltr" role="presentation"><span style="font-family:Courier New , Courier , monospace;">fails_in_row</span>, <span style="font-family:Courier New , Courier , monospace;">passes_in_row</span> (integers): the current streaks; a check of one kind resets the other.</p>
+		</li>
+		<li aria-level="2" dir="ltr">
+		<p dir="ltr" role="presentation"><span style="font-family:Courier New , Courier , monospace;">muted</span> (boolean): whether alerts are silenced.</p>
+		</li>
+		<li aria-level="2" dir="ltr">
+		<p dir="ltr" role="presentation"><span style="font-family:Courier New , Courier , monospace;">alerts</span> (integer): how many alerts have been raised.</p>
+		</li>
+	</ul>
+	</li>
+</ul>
+
+<p dir="ltr">When writing <span style="font-family:Courier New , Courier , monospace;">data/health.json</span> back, preserve the field order shown above, and keep services in the order they appear in the file.</p>
+
+<p dir="ltr"><br />
+<strong>Command Output</strong></p>
+
+<p dir="ltr">Each command prints a one-line result on success, or <span style="font-family:Courier New , Courier , monospace;">Error: &lt;REASON&gt;</span> on failure. Its rules are checked in the order listed, stopping at the first failure, and on failure <span style="font-family:Courier New , Courier , monospace;">data/health.json</span> is not modified.</p>
+
+<p dir="ltr"><br />
+<strong>Commands</strong></p>
+
+<p dir="ltr"><br />
+<strong><span style="font-family:Courier New , Courier , monospace;">check</span></strong></p>
+
+<p dir="ltr">Records the result of a check for a service.</p>
+
+<p dir="ltr"><strong>Usage</strong></p>
+
+<pre>
+<code>./health check &lt;service&gt; &lt;up|down&gt;</code></pre>
+
+<p dir="ltr"><strong>Output</strong></p>
+
+<pre>
+<code>&lt;service&gt; up (&lt;n&gt; in a row)
+&lt;service&gt; down (&lt;n&gt; in a row)
+&lt;service&gt; ALERT: down &lt;n&gt; in a row
+&lt;service&gt; recovered</code></pre>
+
+<p dir="ltr"><strong>Rules</strong></p>
+
+<ul>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">If the result is not <span style="font-family:Courier New , Courier , monospace;">up</span> or <span style="font-family:Courier New , Courier , monospace;">down</span>, fail with <span style="font-family:Courier New , Courier , monospace;">INVALID_RESULT</span>.</p>
+	</li>
+</ul>
+
+<p dir="ltr">On success:</p>
+
+<ul>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">A service seen for the first time is appended as <span style="font-family:Courier New , Courier , monospace;">ok</span>.</p>
+	</li>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">A down check adds one to <span style="font-family:Courier New , Courier , monospace;">fails_in_row</span> and resets <span style="font-family:Courier New , Courier , monospace;">passes_in_row</span>. When the fails reach three and the status is <span style="font-family:Courier New , Courier , monospace;">ok</span>, the status becomes <span style="font-family:Courier New , Courier , monospace;">alerting</span>; unless the service is muted, <span style="font-family:Courier New , Courier , monospace;">alerts</span> goes up by one and the ALERT line is printed.</p>
+	</li>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">An up check adds one to <span style="font-family:Courier New , Courier , monospace;">passes_in_row</span> and resets <span style="font-family:Courier New , Courier , monospace;">fails_in_row</span>. When the passes reach two and the status is <span style="font-family:Courier New , Courier , monospace;">alerting</span>, the status becomes <span style="font-family:Courier New , Courier , monospace;">ok</span> and the recovered line is printed.</p>
+	</li>
+</ul>
+
+<p dir="ltr"><br />
+<strong><span style="font-family:Courier New , Courier , monospace;">mute</span></strong></p>
+
+<p dir="ltr">Pauses alerts for a service.</p>
+
+<p dir="ltr"><strong>Usage</strong></p>
+
+<pre>
+<code>./health mute &lt;service&gt;</code></pre>
+
+<p dir="ltr"><strong>Output</strong></p>
+
+<pre>
+<code>&lt;service&gt; muted</code></pre>
+
+<p dir="ltr"><strong>Rules</strong></p>
+
+<p dir="ltr">Check these rules in order and stop at the first failure:</p>
+
+<ul>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">If the service has never been checked, fail with <span style="font-family:Courier New , Courier , monospace;">SERVICE_NOT_FOUND</span>.</p>
+	</li>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">If it is already muted, fail with <span style="font-family:Courier New , Courier , monospace;">ALREADY_MUTED</span>.</p>
+	</li>
+</ul>
+
+<p dir="ltr">On success, set <span style="font-family:Courier New , Courier , monospace;">muted</span>.</p>
+
+<p dir="ltr"><br />
+<strong><span style="font-family:Courier New , Courier , monospace;">unmute</span></strong></p>
+
+<p dir="ltr">Resumes alerts for a muted service.</p>
+
+<p dir="ltr"><strong>Usage</strong></p>
+
+<pre>
+<code>./health unmute &lt;service&gt;</code></pre>
+
+<p dir="ltr"><strong>Output</strong></p>
+
+<pre>
+<code>&lt;service&gt; unmuted</code></pre>
+
+<p dir="ltr"><strong>Rules</strong></p>
+
+<p dir="ltr">Check these rules in order and stop at the first failure:</p>
+
+<ul>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">If the service has never been checked, fail with <span style="font-family:Courier New , Courier , monospace;">SERVICE_NOT_FOUND</span>.</p>
+	</li>
+	<li aria-level="1" dir="ltr">
+	<p dir="ltr" role="presentation">If it is not muted, fail with <span style="font-family:Courier New , Courier , monospace;">NOT_MUTED</span>.</p>
+	</li>
+</ul>
+
+<p dir="ltr">On success, clear <span style="font-family:Courier New , Courier , monospace;">muted</span>; a service that is already alerting does not raise a new alert.</p>
+
+<p><br />
+<strong>Note</strong>: Refer to <span style="font-family:Courier New , Courier , monospace;">README.md</span> for more details and examples.</p>

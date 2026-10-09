@@ -1,0 +1,20 @@
+version: 1.0
+configuration:
+    has_webserver: false
+    readonly_paths:
+        - README.md
+        - src/test/java/com/health/CommandsTest.java
+        - pom.xml
+        - reset.sh
+        - test.sh
+    scoring:
+        command: bash -lc "bash test.sh"
+        files:
+            - junit.xml
+    ide_config:
+        default_open_files:
+            - README.md
+        project_menu:
+            install: bash -lc "mvn -B -ntp -DskipTests package"
+            run: bash run.sh
+            test: bash -lc "bash test.sh"
