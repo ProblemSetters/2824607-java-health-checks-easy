@@ -40,18 +40,19 @@ public final class Commands {
 
         Service service = findService(state, name);
         if (service == null) {
-            service = new Service();
-            service.service = name;
-            state.services.add(service);
+            Service fresh = new Service();
+            fresh.service = name;
+            state.services.add(fresh);
+            return success(name + " " + result + " (1 in a row)");
         }
 
         if ("down".equals(result)) {
             service.failsInRow++;
             service.passesInRow = 0;
-            if (service.failsInRow >= ALERT_AFTER && service.status == Status.Ok) {
+            if (service.failsInRow == ALERT_AFTER) {
                 service.status = Status.Alerting;
+                service.alerts++;
                 if (!service.muted) {
-                    service.alerts++;
                     return success(name + " ALERT: down " + service.failsInRow + " in a row");
                 }
             }
@@ -59,10 +60,14 @@ public final class Commands {
         }
 
         service.passesInRow++;
-        service.failsInRow = 0;
+        if (service.failsInRow > 0) {
+            service.failsInRow--;
+        }
         if (service.passesInRow >= RECOVER_AFTER && service.status == Status.Alerting) {
             service.status = Status.Ok;
-            return success(name + " recovered");
+            if (!service.muted) {
+                return success(name + " recovered");
+            }
         }
 
         return success(name + " up (" + service.passesInRow + " in a row)");
@@ -86,10 +91,7 @@ public final class Commands {
     /// Turn a service's alerts back on.
     public static CommandResult unmute(State state, String name) {
         Service service = findService(state, name);
-        if (service == null) {
-            return failure(Reason.SERVICE_NOT_FOUND);
-        }
-        if (!service.muted) {
+        if (service == null || !service.muted) {
             return failure(Reason.NOT_MUTED);
         }
 
